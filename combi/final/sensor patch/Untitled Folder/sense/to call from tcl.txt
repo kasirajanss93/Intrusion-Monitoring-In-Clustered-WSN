@@ -1,0 +1,11 @@
+for {set i 0 }  {$i < $val(nn) } { incr i } {
+set ragent_($i) [$n($i) set ragent_]
+}
+
+ set	SENSE	[new Agent/ENVIRONMENT]
+ for {set i 1} {$i < [ expr $val(nn)  / 2 ] } {incr i} {
+ $SENSE	get_sensor	$ragent_($i)	$i
+ }
+
+ $ns at 2   "$SENSE begin_sense"
+ $ns at 5.0 "$SENSE stop_sense"

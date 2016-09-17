@@ -1,0 +1,6 @@
+li=1
+>>dosim 0
+ params: -hp_n 25 -bn_bw 5 -bn_dl 6 -bn_qs 50 -bn_qm 1 -nt_bw 10 -nt_dl 2 -ur_n 30 -ur_cr 100 -ur_ps 1000 -ur_st 20 -ur_sp 240 -ur_rs 0 -ur_pt 1 -ur_app 0 -ak_n 20 -ak_ng 1 -ak_tg 0 -ak_rs 0 -ak_pr 0.25 -ak_ps 50 -ak_bp 200 -ak_ap 1000 -ak_st 120 -ak_sp 220 -ak_tp 1 -ak_mw 1 -ak_cp 10 -ak_spf_mn 1 -ak_spf_mx 60000 -ak_spf_lv 0 -tm_fi 240 -ns_db 0 -ns_of 2 -li 1
+li=1
+>>dosim 0
+ params: -hp_n 25 -bn_bw 5 -bn_dl 6 -bn_qs 50 -bn_qm 1 -nt_bw 10 -nt_dl 2 -ur_n 30 -ur_cr 100 -ur_ps 1000 -ur_st 20 -ur_sp 240 -ur_rs 0 -ur_pt 1 -ur_app 0 -ak_n 20 -ak_ng 1 -ak_tg 0 -ak_rs 0 -ak_pr 0.25 -ak_ps 50 -ak_bp 200 -ak_ap 1000 -ak_st 120 -ak_sp 220 -ak_tp 1 -ak_mw 1 -ak_cp 10 -ak_spf_mn 1 -ak_spf_mx 60000 -ak_spf_lv 0 -tm_fi 240 -ns_db 0 -ns_of 2 -li 1

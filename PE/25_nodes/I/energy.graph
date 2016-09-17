@@ -1,0 +1,1 @@
+xgraph -bg white -x no. of nodes -y avg_energy -lw 3 -t average_energy energy.tr

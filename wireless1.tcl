@@ -1,0 +1,85 @@
+set val(chan)         Channel/WirelessChannel  ;# channel type
+set val(prop)         Propagation/TwoRayGround ;# radio-propagation model
+set val(ant)          Antenna/OmniAntenna      ;# Antenna type
+set val(ll)           LL                       ;# Link layer type
+set val(ifq)          Queue/DropTail/PriQueue  ;# Interface queue type
+set val(ifqlen)        50                       ;# max packet in ifq
+set val(netif)        Phy/WirelessPhy          ;# network interface type
+set val(mac)          Mac/802_11               ;# MAC type
+set val(rp)           AODV                     ;# ad-hoc routing protocol 
+set val(nn)           20                        ;# number of mobilenodes
+set val(stop)         150.0                        ;# number of mobilenodes
+set ns_    [new Simulator]
+set tracefd     [open wireless1.tr w]
+set namtrace [open wireless1.nam w]
+$ns_ trace-all $tracefd
+$ns_ namtrace-all-wireless $namtrace 500 500           
+set topo	[new Topography]
+$topo load_flatgrid 500 500
+create-god $val(nn)
+  $ns_ node-config -adhocRouting $val(rp) \
+                         -llType $val(ll) \
+                         -macType $val(mac) \
+                         -ifqType $val(ifq) \
+                         -ifqLen $val(ifqlen) \
+                         -antType $val(ant) \
+                         -propType $val(prop) \
+                         -phyType $val(netif) \
+                         -topoInstance $topo \
+                         -channelType $val(chan) \
+                         -agentTrace ON \
+                         -routerTrace ON \
+                         -macTrace OFF \
+                         -movementTrace OFF
+
+proc record {} {
+for {set i 0} {$i < $val(nn) } {incr i} {
+	global node-id1 sink($i) f0 
+} 
+for {set i 0} {$i < $val(nn) } {incr i} {
+                set node_($i) [$ns_ node ]
+                $node_($i) random-motion 0       ;# disable random motion
+        }    
+
+
+for {set i 0} {$i < $val(nn) } {incr i} {
+                $ns_ initial_node_pos $node_($i) 15+i*10
+        }    
+for {set i 0} {$i < $val(nn) } {incr i} {
+set sink($i) [new Agent/LossMonitor]
+}
+set tcp [new Agent/TCP]
+$tcp set class_ 2
+set sink [new Agent/TCPSink]
+for {set i 0} {$i < $val(nn) } {incr i} {
+$ns_ attach-agent $node_($i) $tcp
+for {set j [expr $i+1]} {$j < $val(nn) } {incr j} {
+$ns_ attach-agent $node_($j) $sink
+$ns_ connect $tcp $sink
+set cbr [new Application/Traffic/CBR]
+$cbr attach-agent $tcp
+$cbr set type_ CBR
+$cbr set packet_size_ 1000
+$cbr set rate_ 1mb
+$cbr set random_ false
+$ns_ at $i "$cbr start"
+
+}
+
+}
+ 
+for {set i 0} {$i < $val(nn) } {incr i} {
+    $ns_ at 150.0 "$node_($i) reset";
+}
+#$ns_ at 150.0001 "$ns_ nam-end-wirless $val(stop)"
+$ns_ at 150.0001 "stop"
+$ns_ at 150.0002 "puts \"NS EXITING...\" ; $ns_ halt"
+proc stop {} {
+    global ns_ tracefd namtrace
+    close $tracefd
+    close $namtrace
+exec nam wireless1.nam &
+}
+
+puts "Starting Simulation..."
+$ns_ run

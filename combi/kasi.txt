@@ -1,0 +1,93 @@
+#-------------------------------------------------
+# Create and attach UDP agents
+#-------------------------------------------------
+
+set udp0 [new Agent/UDP]
+set udp1 [new Agent/UDP]
+
+$ns_ attach-agent $node_(0) $udp0
+$ns_ attach-agent $node_(1) $udp1
+
+$ns_ connect $udp0 $udp1
+
+# handle dispenser process
+Agent/UDP instproc process_data {from data} {
+global ns_ udp0 udp1	
+set fields [split $data ":"]
+puts "$fields"
+set txnode [lindex $fields 0]
+set rxnode [lindex $fields 1]
+set procId [lindex $fields 2]
+set procIniTime [lindex $fields 3]
+set msgType [lindex $fields 4]
+set now [$ns_ now]
+
+if {$msgType==1} {
+	puts "Node $rxnode receive status req from $txnode (process $procId started at $procIniTime)"
+	$ns_ at $now "$udp1 sendmsg 3 \"$rxnode:$txnode:$procId:$procIniTime:2\" 0"
+	
+}
+if {$msgType==2} {
+	puts "Node $rxnode receive tx res from $txnode (process $procId started at $procIniTime)"
+	$ns_ at $now "$udp0 sendmsg 2 \"$rxnode:$txnode:$procId:$procIniTime:3\" 0"
+	
+}
+if {$msgType==3} {
+	puts "Node $rxnode receive load status req from $txnode (process $procId started at $procIniTime)"
+	$ns_ at $now "$udp1 sendmsg 6 \"$rxnode:$txnode:$procId:$procIniTime:4\" 0"
+	
+}
+if {$msgType==4} {
+	puts "Node $rxnode receive tx load res from $txnode (process $procId started at $procIniTime)"
+	$ns_ at $now "$udp0 sendmsg 2 \"$rxnode:$txnode:$procId:$procIniTime:5\" 0"
+	
+}
+if {$msgType==5} {
+	puts "Node $rxnode receive dispense status req from $txnode (process $procId started at $procIniTime)"
+	$ns_ at $now "$udp1 sendmsg 4 \"$rxnode:$txnode:$procId:$procIniTime:6\" 0"
+	
+}
+if {$msgType==6} {
+	puts "Node $rxnode receive dispense status res from $txnode (process $procId started at $procIniTime)"
+	$ns_ at $now "$udp0 sendmsg 5 \"$rxnode:$txnode:$procId:$procIniTime:7\" 0"
+	
+}
+if {$msgType==7} {
+	puts "Node $rxnode receive dispense command from $txnode (process $procId started at $procIniTime)"
+	record_proc_delay $procId $txnode $rxnode [expr $now-$procIniTime]
+	
+}
+
+
+}
+
+proc record_proc_delay {proc_id tx_id rx_id delay} {
+global f1
+puts $f1 "$proc_id $tx_id $rx_id $delay" 
+}
+
+proc record_msgdelay {msg_id sent_time recv_time delay} {
+global f2
+puts $f2 "$msg_id $sent_time $recv_time $delay" 
+}
+
+
+for {set i 0} {$i < 500 } {incr i} {
+	set stime [expr 5.0*($i+1)]
+	$ns_ at $stime "$udp0 sendmsg 2 \"0:1:$i:$stime:1\" 0"	
+}
+$ns_ at 2600.0 "stop"
+$ns_ at 2600.0 "puts \"NS EXITING...\" ; $ns_ halt"
+proc stop {} {
+    global ns_ tracefd f1 f2
+    $ns_ flush-trace
+    close $tracefd
+    close $f1
+    close $f2
+}
+
+
+#-------------------------------------------
+# RUN
+#-------------------------------------------
+$ns_ run

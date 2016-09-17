@@ -1,0 +1,356 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<title>sha1.tcl</title>
+<style type="text/css">
+.enscript-comment { font-style: italic; color: rgb(178,34,34); }
+.enscript-function-name { font-weight: bold; color: rgb(0,0,255); }
+.enscript-variable-name { font-weight: bold; color: rgb(184,134,11); }
+.enscript-keyword { font-weight: bold; color: rgb(160,32,240); }
+.enscript-reference { font-weight: bold; color: rgb(95,158,160); }
+.enscript-string { font-weight: bold; color: rgb(188,143,143); }
+.enscript-builtin { font-weight: bold; color: rgb(218,112,214); }
+.enscript-type { font-weight: bold; color: rgb(34,139,34); }
+.enscript-highlight { text-decoration: underline; color: 0; }
+</style>
+</head>
+<body id="top">
+<h1 style="margin:8px;" id="f1">sha1.tcl&nbsp;&nbsp;&nbsp;<span style="font-weight: normal; font-size: 0.5em;">[<a href="?txt">plain text</a>]</span></h1>
+<hr/>
+<div></div>
+<pre>
+<span class="enscript-comment">##################################################
+</span><span class="enscript-comment">#
+</span><span class="enscript-comment"># sha1.tcl - SHA1 in Tcl
+</span><span class="enscript-comment"># Author: Don Libes &lt;<a href="mailto:libes@nist.gov">libes@nist.gov</a>&gt;, May 2001
+</span><span class="enscript-comment"># Version 1.0.3
+</span><span class="enscript-comment">#
+</span><span class="enscript-comment"># SHA1 defined by FIPS 180-1, &quot;The SHA1 Message-Digest Algorithm&quot;,
+</span><span class="enscript-comment">#          <a href="http://www.itl.nist.gov/fipspubs/fip180-1.htm">http://www.itl.nist.gov/fipspubs/fip180-1.htm</a>
+# HMAC defined by RFC 2104, &quot;Keyed-Hashing for Message Authentication&quot;
+</span><span class="enscript-comment">#
+</span><span class="enscript-comment"># Some of the comments below come right out of FIPS 180-1; That's why
+</span><span class="enscript-comment"># they have such peculiar numbers.  In addition, I have retained
+</span><span class="enscript-comment"># original syntax, etc. from the FIPS.  All remaining bugs are mine.
+</span><span class="enscript-comment">#
+</span><span class="enscript-comment"># HMAC implementation by D. J. Hagberg &lt;<a href="mailto:dhagberg@millibits.com">dhagberg@millibits.com</a>&gt; and
+</span><span class="enscript-comment"># is based on C code in FIPS 2104.
+</span><span class="enscript-comment">#
+</span><span class="enscript-comment"># For more info, see: <a href="http://expect.nist.gov/sha1pure">http://expect.nist.gov/sha1pure</a>
+#
+</span><span class="enscript-comment"># - Don
+</span><span class="enscript-comment">##################################################
+</span>
+<span class="enscript-comment">### Code speedups by Donal Fellows &lt;<a href="mailto:fellowsd@cs.man.ac.uk">fellowsd@cs.man.ac.uk</a>&gt; who may well
+</span><span class="enscript-comment">### have added some extra bugs of his own...  :^)
+</span>
+<span class="enscript-comment">### Changed the code to use Trf if this package is present on the
+</span><span class="enscript-comment">### system requiring the sha1 package. Analogous to md5.
+</span>
+<span class="enscript-keyword">package</span> require <span class="enscript-keyword">Tcl</span> 8.2
+namespace <span class="enscript-keyword">eval</span> ::sha1 {
+}
+
+<span class="enscript-keyword">if</span> {![<span class="enscript-keyword">catch</span> {<span class="enscript-keyword">package</span> require Trf 2.0}] &amp;&amp; ![<span class="enscript-keyword">catch</span> {::sha1 -- test}]} {
+    <span class="enscript-comment"># Trf is available, so implement the functionality provided here
+</span>    <span class="enscript-comment"># in terms of calls to Trf for speed.
+</span>
+    <span class="enscript-keyword">proc</span> ::sha1::sha1 {msg} {
+	<span class="enscript-keyword">string</span> tolower [::hex -mode encode -- [::sha1 -- $<span class="enscript-variable-name">msg</span>]]
+    }
+
+    <span class="enscript-comment"># hmac: hash for message authentication
+</span>
+    <span class="enscript-comment"># SHA1 of Trf and SHA1 as defined by this package have slightly
+</span>    <span class="enscript-comment"># different results. Trf returns the digest in binary, here we get
+</span>    <span class="enscript-comment"># it as hex-string. In the computation of the HMAC the latter
+</span>    <span class="enscript-comment"># requires back conversion into binary in some places. With Trf we
+</span>    <span class="enscript-comment"># can use omit these. (Not all, the first place must not the changed,
+</span>    <span class="enscript-comment"># see [x]
+</span>
+    <span class="enscript-keyword">proc</span> ::sha1::hmac {key <span class="enscript-keyword">text</span>} {
+	<span class="enscript-comment"># if key is longer than 64 bytes, reset it to SHA1(key).  If shorter, 
+</span>	<span class="enscript-comment"># pad it out with null (\x00) chars.
+</span>	<span class="enscript-keyword">set</span> keyLen [<span class="enscript-keyword">string</span> length $<span class="enscript-variable-name">key</span>]
+	<span class="enscript-keyword">if</span> {$<span class="enscript-variable-name">keyLen</span> &gt; 64} {
+	    <span class="enscript-keyword">set</span> key [binary <span class="enscript-keyword">format</span> H32 [sha1 $<span class="enscript-variable-name">key</span>]]
+	    <span class="enscript-comment"># [x] set key [::sha1 -- $key]
+</span>	    <span class="enscript-keyword">set</span> keyLen [<span class="enscript-keyword">string</span> length $<span class="enscript-variable-name">key</span>]
+	}
+    
+	<span class="enscript-comment"># ensure the key is padded out to 64 chars with nulls.
+</span>	<span class="enscript-keyword">set</span> padLen [<span class="enscript-keyword">expr</span> {64 - $<span class="enscript-variable-name">keyLen</span>}]
+	<span class="enscript-keyword">append</span> key [binary <span class="enscript-keyword">format</span> <span class="enscript-string">&quot;a$padLen&quot;</span> {}]
+
+	<span class="enscript-comment"># Split apart the key into a list of 16 little-endian words
+</span>	binary <span class="enscript-keyword">scan</span> $<span class="enscript-variable-name">key</span> i16 blocks
+
+	<span class="enscript-comment"># XOR key with ipad and opad values
+</span>	<span class="enscript-keyword">set</span> k_ipad {}
+	<span class="enscript-keyword">set</span> k_opad {}
+	<span class="enscript-keyword">foreach</span> i $<span class="enscript-variable-name">blocks</span> {
+	    <span class="enscript-keyword">append</span> k_ipad [binary <span class="enscript-keyword">format</span> i [<span class="enscript-keyword">expr</span> {$<span class="enscript-variable-name">i</span> ^ 0x36363636}]]
+	    <span class="enscript-keyword">append</span> k_opad [binary <span class="enscript-keyword">format</span> i [<span class="enscript-keyword">expr</span> {$<span class="enscript-variable-name">i</span> ^ 0x5c5c5c5c}]]
+	}
+    
+	<span class="enscript-comment"># Perform inner sha1, appending its results to the outer key
+</span>	<span class="enscript-keyword">append</span> k_ipad $<span class="enscript-variable-name">text</span>
+	<span class="enscript-comment">#append k_opad [binary format H* [sha1 $k_ipad]]
+</span>	<span class="enscript-keyword">append</span> k_opad [::sha1 -- $<span class="enscript-variable-name">k_ipad</span>]
+
+	<span class="enscript-comment"># Perform outer sha1
+</span>	<span class="enscript-comment">#sha1 $k_opad
+</span>	<span class="enscript-keyword">string</span> tolower [::hex -mode encode -- [::sha1 -- $<span class="enscript-variable-name">k_opad</span>]]
+    }
+
+} else {
+    <span class="enscript-comment"># Without Trf use the all-tcl implementation by Don Libes.
+</span>
+    namespace <span class="enscript-keyword">eval</span> ::sha1 {
+	variable K
+
+	<span class="enscript-keyword">proc</span> <span class="enscript-function-name">initK</span> {<span class="enscript-variable-name"></span>} {
+	    variable K {}
+	    <span class="enscript-keyword">foreach</span> t {
+		0x5A827999
+		0x6ED9EBA1
+		0x8F1BBCDC
+		0xCA62C1D6
+	    } {
+		<span class="enscript-keyword">for</span> {<span class="enscript-keyword">set</span> i 0} {$<span class="enscript-variable-name">i</span> &lt; 20} {<span class="enscript-keyword">incr</span> i} {
+		    <span class="enscript-keyword">lappend</span> K [<span class="enscript-keyword">expr</span> {int($<span class="enscript-variable-name">t</span>)}]
+		}
+	    }
+	}
+	initK
+    }
+
+    <span class="enscript-comment"># test sha1
+</span>    <span class="enscript-comment">#
+</span>    <span class="enscript-comment"># This proc is not necessary during runtime and may be omitted if you
+</span>    <span class="enscript-comment"># are simply inserting this file into a production program.
+</span>    <span class="enscript-comment">#
+</span>    <span class="enscript-keyword">proc</span> ::sha1::test {} {
+	<span class="enscript-keyword">foreach</span> {msg expected} {
+	    <span class="enscript-string">&quot;abc&quot;</span>
+	    <span class="enscript-string">&quot;a9993e364706816aba3e25717850c26c9cd0d89d&quot;</span>
+	    <span class="enscript-string">&quot;abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq&quot;</span>
+	    <span class="enscript-string">&quot;84983e441c3bd26ebaae4aa1f95129e5e54670f1&quot;</span>
+	    <span class="enscript-string">&quot;[string repeat a 1000000]&quot;</span>
+	    <span class="enscript-string">&quot;34aa973cd4c4daa4f61eeb2bdbad27316534016f&quot;</span>
+	} {
+	    <span class="enscript-keyword">puts</span> <span class="enscript-string">&quot;testing: sha1 \&quot;$msg\&quot;&quot;</span>
+	    <span class="enscript-keyword">set</span> msg [<span class="enscript-keyword">subst</span> $<span class="enscript-variable-name">msg</span>]
+	    <span class="enscript-keyword">set</span> msgLen [<span class="enscript-keyword">string</span> length $<span class="enscript-variable-name">msg</span>]
+	    <span class="enscript-keyword">if</span> {$<span class="enscript-variable-name">msgLen</span> &gt; 10000} {
+		<span class="enscript-keyword">puts</span> <span class="enscript-string">&quot;warning: msg length = $msgLen; this may take a while . . .&quot;</span>
+	    }
+	    <span class="enscript-keyword">set</span> computed [sha1 $<span class="enscript-variable-name">msg</span>]
+	    <span class="enscript-keyword">puts</span> <span class="enscript-string">&quot;expected: $expected&quot;</span>
+	    <span class="enscript-keyword">puts</span> <span class="enscript-string">&quot;computed: $computed&quot;</span>
+	    <span class="enscript-keyword">if</span> {0 != [<span class="enscript-keyword">string</span> compare $<span class="enscript-variable-name">computed</span> $<span class="enscript-variable-name">expected</span>]} {
+		<span class="enscript-keyword">puts</span> <span class="enscript-string">&quot;FAILED&quot;</span>
+	    } else {
+		<span class="enscript-keyword">puts</span> <span class="enscript-string">&quot;SUCCEEDED&quot;</span>
+	    }
+	}
+    }
+
+    <span class="enscript-comment"># time sha1
+</span>    <span class="enscript-comment">#
+</span>    <span class="enscript-comment"># This proc is not necessary during runtime and may be omitted if you
+</span>    <span class="enscript-comment"># are simply inserting this file into a production program.
+</span>    <span class="enscript-comment">#
+</span>    <span class="enscript-keyword">proc</span> ::sha1::<span class="enscript-keyword">time</span> {} {
+	<span class="enscript-keyword">foreach</span> len {10 50 100 500 1000 5000 10000} {
+	    <span class="enscript-keyword">set</span> <span class="enscript-keyword">time</span> [::<span class="enscript-keyword">time</span> {sha1 [<span class="enscript-keyword">format</span> %$<span class="enscript-variable-name">len</span>.0s <span class="enscript-string">&quot;&quot;</span>]} 10]
+	    <span class="enscript-keyword">set</span> msec [<span class="enscript-keyword">lindex</span> $<span class="enscript-variable-name">time</span> 0]
+	    <span class="enscript-keyword">puts</span> <span class="enscript-string">&quot;input length $len: [expr {$msec/1000}] milliseconds per interation&quot;</span>
+	}
+    }
+
+    <span class="enscript-keyword">proc</span> ::sha1::sha1 {msg} {
+	variable K
+
+	<span class="enscript-comment">#
+</span>	<span class="enscript-comment"># 4. MESSAGE PADDING
+</span>	<span class="enscript-comment">#
+</span>
+	<span class="enscript-comment"># pad to 512 bits (512/8 = 64 bytes)
+</span>
+	<span class="enscript-keyword">set</span> msgLen [<span class="enscript-keyword">string</span> length $<span class="enscript-variable-name">msg</span>]
+
+	<span class="enscript-comment"># last 8 bytes are reserved for msgLen
+</span>	<span class="enscript-comment"># plus 1 for &quot;1&quot;
+</span>
+	<span class="enscript-keyword">set</span> padLen [<span class="enscript-keyword">expr</span> {56 - $<span class="enscript-variable-name">msgLen</span>%64}]
+	<span class="enscript-keyword">if</span> {$<span class="enscript-variable-name">msgLen</span> % 64 &gt;= 56} {
+	    <span class="enscript-keyword">incr</span> padLen 64
+	}
+
+	<span class="enscript-comment"># 4a. and b. append single 1b followed by 0b's
+</span>	<span class="enscript-keyword">append</span> msg [binary <span class="enscript-keyword">format</span> <span class="enscript-string">&quot;a$padLen&quot;</span> \200]
+
+	<span class="enscript-comment"># 4c. append 64-bit length
+</span>	<span class="enscript-comment"># Our implementation obviously limits string length to 32bits.
+</span>	<span class="enscript-keyword">append</span> msg \0\0\0\0[binary <span class="enscript-keyword">format</span> <span class="enscript-string">&quot;I&quot;</span> [<span class="enscript-keyword">expr</span> {8*$<span class="enscript-variable-name">msgLen</span>}]]
+    
+	<span class="enscript-comment">#
+</span>	<span class="enscript-comment"># 7. COMPUTING THE MESSAGE DIGEST
+</span>	<span class="enscript-comment">#
+</span>
+	<span class="enscript-comment"># initial H buffer
+</span>
+	<span class="enscript-keyword">set</span> H0 [<span class="enscript-keyword">expr</span> {int(0x67452301)}]
+	<span class="enscript-keyword">set</span> H1 [<span class="enscript-keyword">expr</span> {int(0xEFCDAB89)}]
+	<span class="enscript-keyword">set</span> H2 [<span class="enscript-keyword">expr</span> {int(0x98BADCFE)}]
+	<span class="enscript-keyword">set</span> H3 [<span class="enscript-keyword">expr</span> {int(0x10325476)}]
+	<span class="enscript-keyword">set</span> H4 [<span class="enscript-keyword">expr</span> {int(0xC3D2E1F0)}]
+
+	<span class="enscript-comment">#
+</span>	<span class="enscript-comment"># process message in 16-word blocks (64-byte blocks)
+</span>	<span class="enscript-comment">#
+</span>
+	<span class="enscript-comment"># convert message to array of 32-bit integers
+</span>	<span class="enscript-comment"># each block of 16-words is stored in M($i,0-16)
+</span>
+	binary <span class="enscript-keyword">scan</span> $<span class="enscript-variable-name">msg</span> I* words
+	<span class="enscript-keyword">set</span> blockLen [<span class="enscript-keyword">llength</span> $<span class="enscript-variable-name">words</span>]
+
+	<span class="enscript-keyword">for</span> {<span class="enscript-keyword">set</span> i 0} {$<span class="enscript-variable-name">i</span> &lt; $<span class="enscript-variable-name">blockLen</span>} {<span class="enscript-keyword">incr</span> i 16} {
+	    <span class="enscript-comment"># 7a. Divide M[i] into 16 words W[0], W[1], ...
+</span>	    <span class="enscript-keyword">set</span> W [<span class="enscript-keyword">lrange</span> $<span class="enscript-variable-name">words</span> $<span class="enscript-variable-name">i</span> [<span class="enscript-keyword">expr</span> {$<span class="enscript-variable-name">i</span>+15}]]
+
+	    <span class="enscript-comment"># 7b. For t = 16 to 79 let W[t] = ....
+</span>	    <span class="enscript-keyword">set</span> t   16
+	    <span class="enscript-keyword">set</span> t3  12
+	    <span class="enscript-keyword">set</span> t8   7
+	    <span class="enscript-keyword">set</span> t14  1
+	    <span class="enscript-keyword">set</span> t16 -1
+	    <span class="enscript-keyword">for</span> {} {$<span class="enscript-variable-name">t</span> &lt; 80} {<span class="enscript-keyword">incr</span> t} {
+		<span class="enscript-keyword">set</span> x [<span class="enscript-keyword">expr</span> {[<span class="enscript-keyword">lindex</span> $<span class="enscript-variable-name">W</span> [<span class="enscript-keyword">incr</span> t3]] ^ [<span class="enscript-keyword">lindex</span> $<span class="enscript-variable-name">W</span> [<span class="enscript-keyword">incr</span> t8]] ^ \
+			[<span class="enscript-keyword">lindex</span> $<span class="enscript-variable-name">W</span> [<span class="enscript-keyword">incr</span> t14]] ^ [<span class="enscript-keyword">lindex</span> $<span class="enscript-variable-name">W</span> [<span class="enscript-keyword">incr</span> t16]]}]
+		<span class="enscript-keyword">lappend</span> W [<span class="enscript-keyword">expr</span> {($<span class="enscript-variable-name">x</span> &lt;&lt; 1) | (($<span class="enscript-variable-name">x</span> &gt;&gt; 31) &amp; 1)}]
+	    }
+
+	    <span class="enscript-comment"># 7c. Let A = H[0] ....
+</span>	    <span class="enscript-keyword">set</span> A $<span class="enscript-variable-name">H0</span>
+	    <span class="enscript-keyword">set</span> B $<span class="enscript-variable-name">H1</span>
+	    <span class="enscript-keyword">set</span> C $<span class="enscript-variable-name">H2</span>
+	    <span class="enscript-keyword">set</span> D $<span class="enscript-variable-name">H3</span>
+	    <span class="enscript-keyword">set</span> E $<span class="enscript-variable-name">H4</span>
+
+	    <span class="enscript-comment"># 7d. For t = 0 to 79 do
+</span>	    <span class="enscript-keyword">for</span> {<span class="enscript-keyword">set</span> t 0} {$<span class="enscript-variable-name">t</span> &lt; 20} {<span class="enscript-keyword">incr</span> t} {
+		<span class="enscript-keyword">set</span> TEMP [<span class="enscript-keyword">expr</span> {(($<span class="enscript-variable-name">A</span> &lt;&lt; 5) | (($<span class="enscript-variable-name">A</span> &gt;&gt; 27) &amp; 0x1f)) + \
+			(($<span class="enscript-variable-name">B</span> &amp; $<span class="enscript-variable-name">C</span>) | ((~$<span class="enscript-variable-name">B</span>) &amp; $<span class="enscript-variable-name">D</span>)) \
+			+ $<span class="enscript-variable-name">E</span> + [<span class="enscript-keyword">lindex</span> $<span class="enscript-variable-name">W</span> $<span class="enscript-variable-name">t</span>] + [<span class="enscript-keyword">lindex</span> $<span class="enscript-variable-name">K</span> $<span class="enscript-variable-name">t</span>]}]
+		<span class="enscript-keyword">set</span> E $<span class="enscript-variable-name">D</span>
+		<span class="enscript-keyword">set</span> D $<span class="enscript-variable-name">C</span>
+		<span class="enscript-keyword">set</span> C [<span class="enscript-keyword">expr</span> {($<span class="enscript-variable-name">B</span> &lt;&lt; 30) | (($<span class="enscript-variable-name">B</span> &gt;&gt; 2) &amp; 0x3fffffff)}]
+		<span class="enscript-keyword">set</span> B $<span class="enscript-variable-name">A</span>
+		<span class="enscript-keyword">set</span> A $<span class="enscript-variable-name">TEMP</span>
+	    }
+	    <span class="enscript-keyword">for</span> {} {$<span class="enscript-variable-name">t</span>&lt;40} {<span class="enscript-keyword">incr</span> t} {
+		<span class="enscript-keyword">set</span> TEMP [<span class="enscript-keyword">expr</span> {(($<span class="enscript-variable-name">A</span> &lt;&lt; 5) | (($<span class="enscript-variable-name">A</span> &gt;&gt; 27) &amp; 0x1f)) + \
+			($<span class="enscript-variable-name">B</span> ^ $<span class="enscript-variable-name">C</span> ^ $<span class="enscript-variable-name">D</span>) \
+			+ $<span class="enscript-variable-name">E</span> + [<span class="enscript-keyword">lindex</span> $<span class="enscript-variable-name">W</span> $<span class="enscript-variable-name">t</span>] + [<span class="enscript-keyword">lindex</span> $<span class="enscript-variable-name">K</span> $<span class="enscript-variable-name">t</span>]}]
+		<span class="enscript-keyword">set</span> E $<span class="enscript-variable-name">D</span>
+		<span class="enscript-keyword">set</span> D $<span class="enscript-variable-name">C</span>
+		<span class="enscript-keyword">set</span> C [<span class="enscript-keyword">expr</span> {($<span class="enscript-variable-name">B</span> &lt;&lt; 30) | (($<span class="enscript-variable-name">B</span> &gt;&gt; 2) &amp; 0x3fffffff)}]
+		<span class="enscript-keyword">set</span> B $<span class="enscript-variable-name">A</span>
+		<span class="enscript-keyword">set</span> A $<span class="enscript-variable-name">TEMP</span>
+	    }
+	    <span class="enscript-keyword">for</span> {} {$<span class="enscript-variable-name">t</span>&lt;60} {<span class="enscript-keyword">incr</span> t} {
+		<span class="enscript-keyword">set</span> TEMP [<span class="enscript-keyword">expr</span> {(($<span class="enscript-variable-name">A</span> &lt;&lt; 5) | (($<span class="enscript-variable-name">A</span> &gt;&gt; 27) &amp; 0x1f)) + \
+			(($<span class="enscript-variable-name">B</span> &amp; $<span class="enscript-variable-name">C</span>) | ($<span class="enscript-variable-name">B</span> &amp; $<span class="enscript-variable-name">D</span>) | ($<span class="enscript-variable-name">C</span> &amp; $<span class="enscript-variable-name">D</span>)) \
+			+ $<span class="enscript-variable-name">E</span> + [<span class="enscript-keyword">lindex</span> $<span class="enscript-variable-name">W</span> $<span class="enscript-variable-name">t</span>] + [<span class="enscript-keyword">lindex</span> $<span class="enscript-variable-name">K</span> $<span class="enscript-variable-name">t</span>]}]
+		<span class="enscript-keyword">set</span> E $<span class="enscript-variable-name">D</span>
+		<span class="enscript-keyword">set</span> D $<span class="enscript-variable-name">C</span>
+		<span class="enscript-keyword">set</span> C [<span class="enscript-keyword">expr</span> {($<span class="enscript-variable-name">B</span> &lt;&lt; 30) | (($<span class="enscript-variable-name">B</span> &gt;&gt; 2) &amp; 0x3fffffff)}]
+		<span class="enscript-keyword">set</span> B $<span class="enscript-variable-name">A</span>
+		<span class="enscript-keyword">set</span> A $<span class="enscript-variable-name">TEMP</span>
+	    }
+	    <span class="enscript-keyword">for</span> {} {$<span class="enscript-variable-name">t</span>&lt;80} {<span class="enscript-keyword">incr</span> t} {
+		<span class="enscript-keyword">set</span> TEMP [<span class="enscript-keyword">expr</span> {(($<span class="enscript-variable-name">A</span> &lt;&lt; 5) | (($<span class="enscript-variable-name">A</span> &gt;&gt; 27) &amp; 0x1f)) + \
+			($<span class="enscript-variable-name">B</span> ^ $<span class="enscript-variable-name">C</span> ^ $<span class="enscript-variable-name">D</span>) \
+			+ $<span class="enscript-variable-name">E</span> + [<span class="enscript-keyword">lindex</span> $<span class="enscript-variable-name">W</span> $<span class="enscript-variable-name">t</span>] + [<span class="enscript-keyword">lindex</span> $<span class="enscript-variable-name">K</span> $<span class="enscript-variable-name">t</span>]}]
+		<span class="enscript-keyword">set</span> E $<span class="enscript-variable-name">D</span>
+		<span class="enscript-keyword">set</span> D $<span class="enscript-variable-name">C</span>
+		<span class="enscript-keyword">set</span> C [<span class="enscript-keyword">expr</span> {($<span class="enscript-variable-name">B</span> &lt;&lt; 30) | (($<span class="enscript-variable-name">B</span> &gt;&gt; 2) &amp; 0x3fffffff)}]
+		<span class="enscript-keyword">set</span> B $<span class="enscript-variable-name">A</span>
+		<span class="enscript-keyword">set</span> A $<span class="enscript-variable-name">TEMP</span>
+	    }
+
+	    <span class="enscript-keyword">set</span> H0 [<span class="enscript-keyword">expr</span> {int(($<span class="enscript-variable-name">H0</span> + $<span class="enscript-variable-name">A</span>) &amp; 0xffffffff)}]
+	    <span class="enscript-keyword">set</span> H1 [<span class="enscript-keyword">expr</span> {int(($<span class="enscript-variable-name">H1</span> + $<span class="enscript-variable-name">B</span>) &amp; 0xffffffff)}]
+	    <span class="enscript-keyword">set</span> H2 [<span class="enscript-keyword">expr</span> {int(($<span class="enscript-variable-name">H2</span> + $<span class="enscript-variable-name">C</span>) &amp; 0xffffffff)}]
+	    <span class="enscript-keyword">set</span> H3 [<span class="enscript-keyword">expr</span> {int(($<span class="enscript-variable-name">H3</span> + $<span class="enscript-variable-name">D</span>) &amp; 0xffffffff)}]
+	    <span class="enscript-keyword">set</span> H4 [<span class="enscript-keyword">expr</span> {int(($<span class="enscript-variable-name">H4</span> + $<span class="enscript-variable-name">E</span>) &amp; 0xffffffff)}]
+	}
+
+	<span class="enscript-keyword">return</span> [<span class="enscript-keyword">format</span> %0.8x%0.8x%0.8x%0.8x%0.8x $<span class="enscript-variable-name">H0</span> $<span class="enscript-variable-name">H1</span> $<span class="enscript-variable-name">H2</span> $<span class="enscript-variable-name">H3</span> $<span class="enscript-variable-name">H4</span>]
+    }
+
+    <span class="enscript-comment">### These procedures are either inlined or replaced with a normal [format]!
+</span>    <span class="enscript-comment">#
+</span>    <span class="enscript-comment">#proc ::sha1::f {t B C D} {
+</span>    <span class="enscript-comment">#    switch [expr {$t/20}] {
+</span>    <span class="enscript-comment">#	 0 {
+</span>    <span class="enscript-comment">#	     expr {($B &amp; $C) | ((~$B) &amp; $D)}
+</span>    <span class="enscript-comment">#	 } 1 - 3 {
+</span>    <span class="enscript-comment">#	     expr {$B ^ $C ^ $D}
+</span>    <span class="enscript-comment">#	 } 2 {
+</span>    <span class="enscript-comment">#	     expr {($B &amp; $C) | ($B &amp; $D) | ($C &amp; $D)}
+</span>    <span class="enscript-comment">#	 }
+</span>    <span class="enscript-comment">#    }
+</span>    <span class="enscript-comment">#}
+</span>    <span class="enscript-comment">#
+</span>    <span class="enscript-comment">#proc ::sha1::byte0 {i} {expr {0xff &amp; $i}}
+</span>    <span class="enscript-comment">#proc ::sha1::byte1 {i} {expr {(0xff00 &amp; $i) &gt;&gt; 8}}
+</span>    <span class="enscript-comment">#proc ::sha1::byte2 {i} {expr {(0xff0000 &amp; $i) &gt;&gt; 16}}
+</span>    <span class="enscript-comment">#proc ::sha1::byte3 {i} {expr {((0xff000000 &amp; $i) &gt;&gt; 24) &amp; 0xff}}
+</span>    <span class="enscript-comment">#
+</span>    <span class="enscript-comment">#proc ::sha1::bytes {i} {
+</span>    <span class="enscript-comment">#    format %0.2x%0.2x%0.2x%0.2x [byte3 $i] [byte2 $i] [byte1 $i] [byte0 $i]
+</span>    <span class="enscript-comment">#}
+</span>
+    <span class="enscript-comment"># hmac: hash for message authentication
+</span>    <span class="enscript-keyword">proc</span> ::sha1::hmac {key <span class="enscript-keyword">text</span>} {
+	<span class="enscript-comment"># if key is longer than 64 bytes, reset it to SHA1(key).  If shorter, 
+</span>	<span class="enscript-comment"># pad it out with null (\x00) chars.
+</span>	<span class="enscript-keyword">set</span> keyLen [<span class="enscript-keyword">string</span> length $<span class="enscript-variable-name">key</span>]
+	<span class="enscript-keyword">if</span> {$<span class="enscript-variable-name">keyLen</span> &gt; 64} {
+	    <span class="enscript-keyword">set</span> key [binary <span class="enscript-keyword">format</span> H32 [sha1 $<span class="enscript-variable-name">key</span>]]
+	    <span class="enscript-keyword">set</span> keyLen [<span class="enscript-keyword">string</span> length $<span class="enscript-variable-name">key</span>]
+	}
+
+	<span class="enscript-comment"># ensure the key is padded out to 64 chars with nulls.
+</span>	<span class="enscript-keyword">set</span> padLen [<span class="enscript-keyword">expr</span> {64 - $<span class="enscript-variable-name">keyLen</span>}]
+	<span class="enscript-keyword">append</span> key [binary <span class="enscript-keyword">format</span> <span class="enscript-string">&quot;a$padLen&quot;</span> {}]
+
+	<span class="enscript-comment"># Split apart the key into a list of 16 little-endian words
+</span>	binary <span class="enscript-keyword">scan</span> $<span class="enscript-variable-name">key</span> i16 blocks
+
+	<span class="enscript-comment"># XOR key with ipad and opad values
+</span>	<span class="enscript-keyword">set</span> k_ipad {}
+	<span class="enscript-keyword">set</span> k_opad {}
+	<span class="enscript-keyword">foreach</span> i $<span class="enscript-variable-name">blocks</span> {
+	    <span class="enscript-keyword">append</span> k_ipad [binary <span class="enscript-keyword">format</span> i [<span class="enscript-keyword">expr</span> {$<span class="enscript-variable-name">i</span> ^ 0x36363636}]]
+	    <span class="enscript-keyword">append</span> k_opad [binary <span class="enscript-keyword">format</span> i [<span class="enscript-keyword">expr</span> {$<span class="enscript-variable-name">i</span> ^ 0x5c5c5c5c}]]
+	}
+    
+	<span class="enscript-comment"># Perform inner sha1, appending its results to the outer key
+</span>	<span class="enscript-keyword">append</span> k_ipad $<span class="enscript-variable-name">text</span>
+	<span class="enscript-keyword">append</span> k_opad [binary <span class="enscript-keyword">format</span> H* [sha1 $<span class="enscript-variable-name">k_ipad</span>]]
+
+	<span class="enscript-comment"># Perform outer sha1
+</span>	sha1 $<span class="enscript-variable-name">k_opad</span>
+    }
+}
+
+<span class="enscript-keyword">package</span> provide sha1 1.0.3
+</pre>
+<hr />
+</body></html>

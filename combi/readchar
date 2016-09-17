@@ -1,0 +1,24 @@
+for {set i 0} {$i < [string length $decrypt]} {incr i} {
+set char [string index $decrypt $i]
+scan $char %c ascii
+#if {$ascii==0} { 
+puts "char: $char $ascii"
+#}
+}
+
+
+
+set res {}
+foreach ele $decrypt {
+set flag 0
+for {set i 0} {$i < [string length $ele]} {incr i} {
+set char [string index $ele $i]
+scan $char %c ascii
+puts "char:$char ascii:$ascii"
+if {$ascii==0} { 
+
+}
+}
+lappend res $ele
+
+}

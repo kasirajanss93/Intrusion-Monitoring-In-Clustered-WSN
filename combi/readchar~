@@ -1,0 +1,7 @@
+for {set i 0} {$i < [string length $decrypt]} {incr i} {
+set char [string index $decrypt $i]
+scan $char %c ascii
+#if {$ascii==0} { 
+puts "char: $char $ascii"
+#}
+}

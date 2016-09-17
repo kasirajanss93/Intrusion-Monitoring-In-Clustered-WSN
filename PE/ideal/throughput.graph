@@ -1,0 +1,2 @@
+xgraph -bg white -x no. of nodes -y throughput -lw 3 -t throughput throughput.tr
+
